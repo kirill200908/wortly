@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#245b49">
+  <meta name="description" content="Ваши немецкие слова. Короткие игровые тренировки. Прогресс, который остаётся с вами.">
+  <title>Wortly — немецкий каждый день</title>
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script src="./core.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#overview" aria-label="Wortly — главная"><span class="brand-mark">w<span>✦</span></span>wortly<span class="brand-dot">.</span></a>
+      <div class="workspace-label">ТВОЙ НЕМЕЦКИЙ</div>
+      <nav class="navigation" aria-label="Основная навигация">
+        <a href="#overview" data-nav="overview"><span data-icon="home"></span><span>Обзор</span></a>
+        <a href="#dictionary" data-nav="dictionary"><span data-icon="book"></span><span>Мой словарь</span><span id="nav-word-count" class="nav-count">12</span></a>
+        <a href="#practice" data-nav="practice"><span data-icon="sparkles"></span><span>Тренировка</span></a>
+        <a href="#progress" data-nav="progress"><span data-icon="chart"></span><span>Мой прогресс</span></a>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="daily-note"><span class="little-sun">✺</span><strong>Kleine Schritte,<br>große Fortschritte.</strong><p>Маленькие шаги —<br>большой прогресс.</p><div class="note-line"></div></div>
+        <button class="sidebar-help" data-action="explain"><span data-icon="help"></span>Как это работает</button>
+        <div class="local-state"><span></span>Сохраняется в этом браузере</div>
+      </div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar"><div class="breadcrumb">Моё пространство <span>/</span> <strong id="page-label">Обзор</strong></div><div class="topbar-right"><span class="language"><span class="german-flag"></span>Немецкий <span class="language-pair">DE → RU</span></span><button class="streak" data-action="show-progress" title="Дни занятий подряд"><span data-icon="flame"></span><span id="streak-number">0</span><span class="streak-text">дней подряд</span></button><span class="avatar" title="Личный словарь">W</span></div></header>
+      <main id="main-content" tabindex="-1"></main>
+      <footer class="page-footer"><span>Понемногу каждый день. <span class="footer-german">Jeden Tag ein bisschen.</span></span><button data-action="export">Скачать резервную копию <span data-icon="download"></span></button></footer>
+    </div>
+  </div>
+  <dialog id="word-dialog" class="modal"><div class="modal-header"><div><span class="eyebrow">ЛИЧНЫЙ СЛОВАРЬ</span><h2 id="word-dialog-title">Добавим новые слова</h2></div><button class="icon-button" data-close="word-dialog" aria-label="Закрыть"><span data-icon="close"></span></button></div><div class="modal-tabs"><button data-tab="single" class="active">По одному</button><button data-tab="bulk">Списком</button></div><form id="word-form"><input type="hidden" name="id"><label>Слово на немецком<input name="de" placeholder="Например, die Freiheit" required maxlength="160" autocomplete="off"></label><label>Перевод на русский<input name="ru" placeholder="свобода" required maxlength="240" autocomplete="off"></label><label>Набор<input name="deck" list="deck-names" placeholder="Мои слова" maxlength="60"></label><p class="form-hint">Несколько переводов можно разделять знаком /.</p><div class="modal-footer"><button type="button" class="button secondary" data-close="word-dialog">Отмена</button><button type="submit" class="button primary">Сохранить слово <span data-icon="plus"></span></button></div></form><form id="bulk-form" hidden><label>Название набора<input name="deck" placeholder="Например, В путешествии" maxlength="60"></label><label>Вставьте список слов<textarea name="words" rows="7" placeholder="das Haus — дом&#10;lernen — учить / изучать&#10;die Reise — путешествие" required maxlength="200000"></textarea></label><p class="form-hint">Каждое слово с новой строки. Между словом и переводом: тире, =, точка с запятой или табуляция.</p><div class="import-file"><label class="button secondary small">Загрузить TXT, CSV, TSV или копию JSON<input type="file" id="import-file" accept=".txt,.csv,.tsv,.json" hidden></label></div><p id="import-feedback" class="import-feedback" aria-live="polite"></p><div class="modal-footer"><button type="button" class="button secondary" data-close="word-dialog">Отмена</button><button type="submit" class="button primary">Добавить список <span data-icon="plus"></span></button></div></form><datalist id="deck-names"></datalist></dialog>
+  <dialog id="confirm-dialog" class="modal compact"><div class="modal-header"><h2 id="confirm-title">Удалить слово?</h2><button class="icon-button" data-close="confirm-dialog" aria-label="Закрыть"><span data-icon="close"></span></button></div><p id="confirm-message"></p><div class="modal-footer"><button class="button secondary" data-close="confirm-dialog">Отмена</button><button class="button danger" id="confirm-yes">Удалить</button></div></dialog>
+  <dialog id="info-dialog" class="modal"><div class="modal-header"><div><span class="eyebrow">УЧИТЬ, ЧТОБЫ ПОМНИТЬ</span><h2>Как Wortly считает прогресс</h2></div><button class="icon-button" data-close="info-dialog" aria-label="Закрыть"><span data-icon="close"></span></button></div><p>Каждый ответ помогает понять, какие слова уже знакомы, а каким нужно больше внимания.</p><ol class="how-list"><li><strong>Добавьте свои слова.</strong><span>По одному или сразу целым списком. Стартовый набор можно удалить.</span></li><li><strong>Тренируйтесь по 5 минут.</strong><span>Карточки — для знакомства, игры — для проверки себя. Ошибки снижают уровень слова.</span></li><li><strong>Возвращайтесь к повторениям.</strong><span>После верного ответа: через 10 минут, 1 день, 3 дня, 7 дней и 21 день. Новый уровень даётся не чаще, чем раз в 4 часа; ранние ответы не переносят повторение. Оценка карточки «Помню» тоже засчитывается — отвечайте честно.</span></li><li><strong>Проверьте память со временем.</strong><span>«Выучено» — уровень 4 из 5: четыре успешных повторения с интервалами. Это оценка по вашим ответам, а не гарантия, что слово больше не забудется.</span></li></ol><div class="privacy-note"><span data-icon="shield"></span><p>Словарь и история хранятся только в этом браузере. Для переноса на другое устройство скачайте резервную копию и загрузите её через «Добавить слова → Списком».</p></div><button class="button primary full" data-close="info-dialog">Всё понятно</button></dialog>
+  <div id="toast" role="status" class="toast" aria-live="polite"></div>
+</body>
+</html>
