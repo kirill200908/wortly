@@ -3,8 +3,12 @@
   const DAY = 86400000, HOUR = 3600000;
   const intervals = [0, 600000, DAY, 3 * DAY, 7 * DAY, 21 * DAY];
   const normalize = value => String(value).normalize('NFKC').toLowerCase().replace(/ё/g, 'е').replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/[.!?…]+$/g, '').replace(/\s+/g, ' ').trim();
-  const alternatives = value => String(value).split(/\s*[\/;|]\s*/).map(normalize).filter(Boolean);
-  const checkAnswer = (answer, expected) => alternatives(expected).includes(normalize(answer));
+  const checkAnswer = (answer, expected) => String(answer).trim() === String(expected).trim();
+  const pairKey = (de, ru) => JSON.stringify([String(de).trim(), String(ru).trim()]);
+  function uniquePrompts(words, direction = 'de-ru') {
+    const field = direction === 'de-ru' ? 'de' : 'ru', seen = new Set();
+    return words.filter(word => {const key = word[field].trim(); if (seen.has(key)) return false; seen.add(key); return true;});
+  }
   const status = word => word.level >= 4 ? 'mastered' : word.attempts ? 'learning' : 'new';
   const dateKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   function applyAnswer(word, correct, now = Date.now()) {
@@ -26,29 +30,56 @@
   function makeWord(de, ru, deck = 'Мои слова') {
     return {id: root.crypto?.randomUUID?.() || 'w-' + Date.now() + '-' + Math.random().toString(36).slice(2), de: de.trim(), ru: ru.trim(), deck: deck.trim() || 'Мои слова', level: 0, attempts: 0, correct: 0, lapses: 0, due: 0, lastSeen: 0, lastPromotion: 0, createdAt: Date.now()};
   }
-  function splitRow(line) {
-    let quote = false, current = '', result = [];
-    const delimiter = line.includes('\t') ? '\t' : line.includes('—') || line.includes('–') || /\s-\s/.test(line) ? null : line.includes('=') ? '=' : line.includes(';') ? ';' : line.includes(',') ? ',' : undefined;
-    if (delimiter === undefined) return [];
-    if (delimiter === null) return line.split(/\s*[—–]\s*|\s-\s/).map(s => s.trim());
+  function splitRow(line, preferredSeparator) {
+    let quote = false, separator = -1, comma = -1;
+    // Delimiters inside a quoted CSV field belong to the word or its translation.
+    // Prefer an explicit separator; a comma may be punctuation in a German phrase.
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
-      if (c === '"') { if (quote && line[i + 1] === '"') {current += '"'; i++;} else quote = !quote; }
-      else if (c === delimiter && !quote) {result.push(current.trim()); current = '';}
-      else current += c;
+      if (c === '"') {
+        if (quote && line[i + 1] === '"') i++;
+        else quote = !quote;
+      } else if (!quote && preferredSeparator) {
+        if (c === preferredSeparator) {separator = i; break;}
+      } else if (!quote && c === ',') {
+        if (comma < 0) comma = i;
+        if (line.trimStart().startsWith('"')) {separator = i; break;}
+      } else if (!quote && ('\t;=—–'.includes(c) || (c === '-' && /\s/.test(line[i - 1] || '') && /\s/.test(line[i + 1] || '')))) {
+        separator = i;
+        break;
+      }
     }
-    result.push(current.trim());
-    return result;
+    if (separator < 0 && !preferredSeparator) separator = comma;
+    if (separator < 0) return [];
+    function field(value) {
+      const trimmed = value.trim();
+      if (!trimmed.startsWith('"')) return trimmed;
+      let decoded = '';
+      for (let i = 1; i < trimmed.length; i++) {
+        if (trimmed[i] !== '"') decoded += trimmed[i];
+        else if (trimmed[i + 1] === '"') {decoded += '"'; i++;}
+        else return trimmed.slice(i + 1).trim() ? null : decoded.trim();
+      }
+      return null;
+    }
+    const de = field(line.slice(0, separator)), ru = field(line.slice(separator + 1));
+    if (de === null || ru === null) return [];
+    const fields = [de, ru];
+    fields.separator = line[separator];
+    return fields;
   }
   function parseBulk(text, deck) {
     const words = [], errors = [];
+    let preferredSeparator, firstRow = true;
     const rows = text.replace(/^\uFEFF/, '').split(/\r?\n/);
     rows.forEach((line, i) => {
       if (!line.trim()) return;
-      const parts = splitRow(line);
-      if (i === 0 && /^(de|german|немецкий|слово)$/i.test(parts[0]) && /^(ru|russian|перевод|русский)$/i.test(parts[1])) return;
-      if (parts.length < 2 || !parts[0] || !parts[1] || parts[0].length > 160 || parts[1].length > 240) {errors.push(i + 1); return;}
-      words.push(makeWord(parts[0], parts.slice(1).join(' / '), deck));
+      const parts = splitRow(line, preferredSeparator), isFirstRow = firstRow;
+      firstRow = false;
+      if (isFirstRow && /^(de|german|немецкий|слово)$/i.test(parts[0]) && /^(ru|russian|перевод|русский)$/i.test(parts[1])) {preferredSeparator = parts.separator; return;}
+      const [de, ru] = parts;
+      if (parts.length < 2 || !de || !parts[1] || de.length > 160 || ru.length > 240) {errors.push(i + 1); return;}
+      words.push(makeWord(de, ru, deck));
     });
     return {words, errors};
   }
@@ -67,16 +98,16 @@
     return count;
   }
   function validBackup(data) {
-    if (!data || data.schema !== 1 || !Array.isArray(data.words) || !Array.isArray(data.history) || data.words.length > 10000 || data.history.length > 100000) return false;
+    if (!data || data.schema !== 1 || !Array.isArray(data.words) || !Array.isArray(data.history) || data.words.length > 10000) return false;
     const finite = v => typeof v === 'number' && Number.isFinite(v) && v >= 0;
     const ids = new Set();
     for (const w of data.words) {
-      if (!w || typeof w.id !== 'string' || !w.id || ids.has(w.id) || typeof w.de !== 'string' || !w.de.trim() || w.de.length > 160 || typeof w.ru !== 'string' || !w.ru.trim() || w.ru.length > 240 || typeof w.deck !== 'string' || w.deck.length > 60 || !Number.isInteger(w.level) || w.level < 0 || w.level > 5 || !Number.isInteger(w.attempts) || w.attempts < 0 || !Number.isInteger(w.correct) || w.correct < 0 || w.correct > w.attempts || ![w.due, w.lastSeen, w.lastPromotion, w.createdAt].every(finite)) return false;
+      if (!w || typeof w.id !== 'string' || !w.id || ids.has(w.id) || typeof w.de !== 'string' || !w.de.trim() || w.de.length > 160 || typeof w.ru !== 'string' || !w.ru.trim() || w.ru.length > 240 || typeof w.deck !== 'string' || w.deck.length > 60 || !Number.isInteger(w.level) || w.level < 0 || w.level > 5 || !Number.isInteger(w.attempts) || w.attempts < 0 || !Number.isInteger(w.correct) || w.correct < 0 || w.correct > w.attempts || !Number.isInteger(w.lapses) || w.lapses < 0 || ![w.due, w.lastSeen, w.lastPromotion, w.createdAt].every(finite)) return false;
       ids.add(w.id);
     }
     return data.history.every(h => h && typeof h.id === 'string' && typeof h.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(h.date) && typeof h.correct === 'boolean' && finite(h.at));
   }
-  const api = {DAY, HOUR, intervals, normalize, alternatives, checkAnswer, status, dateKey, applyAnswer, makeWord, parseBulk, queue, streak, validBackup};
+  const api = {DAY, HOUR, intervals, normalize, checkAnswer, pairKey, uniquePrompts, status, dateKey, applyAnswer, makeWord, parseBulk, queue, streak, validBackup};
   root.Wortly = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -34,7 +34,7 @@
   const ico = (name, cls = '') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconPaths[name] || iconPaths.sparkles}</svg>`;
   function hydrateIcons(el = document) { $$('[data-icon]', el).forEach(e => {e.innerHTML = ico(e.dataset.icon); e.removeAttribute('data-icon');}); }
   const KEY = 'wortly-v1';
-  const starters = [['das Haus','дом'],['die Sonne','солнце'],['lernen','учить / изучать'],['die Freiheit','свобода'],['das Wasser','вода'],['die Reise','путешествие'],['sprechen','говорить'],['der Freund','друг'],['glücklich','счастливый'],['die Zeit','время'],['verstehen','понимать'],['der Morgen','утро']];
+  const starters = [['das Haus','дом'],['die Sonne','солнце'],['lernen','учить'],['die Freiheit','свобода'],['das Wasser','вода'],['die Reise','путешествие'],['sprechen','говорить'],['der Freund','друг'],['glücklich','счастливый'],['die Zeit','время'],['verstehen','понимать'],['der Morgen','утро']];
   let data, storageError = false;
   try {
     const raw = localStorage.getItem(KEY);
@@ -127,8 +127,8 @@
     const statuses={new:'Новое',learning:'Учу',mastered:'Выучено'};
     if(!words.length) {el.innerHTML=`<div class="empty-state">${ico(page==='progress'?'check':'book')}<h3>${search||filter!=='all'||deckFilter!=='all'?'Таких слов пока нет':page==='progress'?'Здесь будут сложные слова':'Словарь ждёт первых слов'}</h3><p>${search?'Попробуй другое слово или перевод.':page==='progress'?'После тренировки здесь появятся слова, в которых были ошибки.':'Добавь свои слова или начни со стартового набора.'}</p>${!data.words.length?'<button class="button primary" data-action="add">Добавить слова</button>':''}</div>`; return;}
     el.innerHTML=`<div class="table-scroll"><table class="word-table"><thead><tr><th>НЕМЕЦКИЙ</th><th>ПЕРЕВОД</th><th>СТАТУС</th><th class="column-progress">${page==='progress'?'ОШИБКИ':'ПРОГРЕСС'}</th><th class="column-actions"><span class="sr-only" aria-label="Действия"></span></th></tr></thead><tbody>${shown.map(w=>{
-      const article=w.de.match(/^(der|die|das)\s+(.+)$/s);
-      return `<tr><td><div class="german-word">${article?`<span><span class="article">${esc(article[1])}</span> ${esc(article[2])}</span>`:`<span>${esc(w.de)}</span>`}<button class="word-sound" data-speak="${esc(w.id)}" aria-label="Послушать ${esc(w.de)}">${ico('sound')}</button></div>${page==='dictionary'?`<span class="deck-name">${esc(w.deck)}</span>`:''}</td><td class="translation-cell">${esc(w.ru)}</td><td><span class="status-badge ${C.status(w)}">${statuses[C.status(w)]}</span></td><td class="column-progress">${page==='progress'?`<span class="level-caption">${w.lapses} ошибок · ${dueText(w)}</span>`:`<div class="level-dots" aria-label="Уровень ${w.level} из 5">${[1,2,3,4,5].map(n=>`<i class="${w.level>=n?'on':''}"></i>`).join('')}</div><div class="level-caption">${dueText(w)}</div>`}</td><td class="column-actions"><div class="row-actions"><button class="icon-button" data-edit="${esc(w.id)}" aria-label="Изменить ${esc(w.de)}">${ico('edit')}</button><button class="icon-button" data-delete="${esc(w.id)}" aria-label="Удалить ${esc(w.de)}">${ico('trash')}</button></div></td></tr>`;
+      const article=w.de.match(/^(der|die|das)(\s+)(.+)$/s);
+      return `<tr><td><div class="german-word">${article?`<span><span class="article">${esc(article[1])}</span>${esc(article[2])}${esc(article[3])}</span>`:`<span>${esc(w.de)}</span>`}<button class="word-sound" data-speak="${esc(w.id)}" aria-label="Послушать ${esc(w.de)}">${ico('sound')}</button></div>${page==='dictionary'?`<span class="deck-name">${esc(w.deck)}</span>`:''}</td><td class="translation-cell">${esc(w.ru)}</td><td><span class="status-badge ${C.status(w)}">${statuses[C.status(w)]}</span></td><td class="column-progress">${page==='progress'?`<span class="level-caption">${w.lapses} ошибок · ${dueText(w)}</span>`:`<div class="level-dots" aria-label="Уровень ${w.level} из 5">${[1,2,3,4,5].map(n=>`<i class="${w.level>=n?'on':''}"></i>`).join('')}</div><div class="level-caption">${dueText(w)}</div>`}</td><td class="column-actions"><div class="row-actions"><button class="icon-button" data-edit="${esc(w.id)}" aria-label="Изменить ${esc(w.de)}">${ico('edit')}</button><button class="icon-button" data-delete="${esc(w.id)}" aria-label="Удалить ${esc(w.de)}">${ico('trash')}</button></div></td></tr>`;
     }).join('')}</tbody></table></div><div class="table-bottom"><span>Показано ${tablePage*limit+1}–${tablePage*limit+shown.length} из ${words.length}</span>${page==='dictionary'?`<div class="pagination"><button data-table-page="${tablePage-1}" ${tablePage===0?'disabled':''} aria-label="Предыдущая страница">←</button><span>${tablePage+1} / ${pages}</span><button data-table-page="${tablePage+1}" ${tablePage===pages-1?'disabled':''} aria-label="Следующая страница">→</button></div>`:`<a href="#dictionary">Весь словарь →</a>`}</div>`;
   }
   function practiceView() {
@@ -140,10 +140,11 @@
     readSettings();
     const available=data.words.filter(w=>(settings.deck==='all'||w.deck===settings.deck)&&(!specificIds||specificIds.includes(w.id)));
     if(!available.length) {toast('Сначала добавь слова для этой тренировки.'); openWords(); return;}
-    if(mode==='choice' && new Set(available.map(w=>C.normalize(settings.direction==='de-ru'?w.ru:w.de))).size<2) {toast('Для выбора перевода нужны хотя бы два разных ответа. Начнём с карточек.'); mode='cards';}
-    if(mode==='match' && available.length<2) {toast('Для поиска пар нужны хотя бы два слова. Начнём с карточек.'); mode='cards';}
-    const selected=shuffle(C.queue(available,Date.now(),mode==='match'?Math.min(12,settings.count):settings.count));
-    session={mode,ids:selected.map(w=>w.id),index:0,answers:[],start:Date.now(),direction:settings.direction,pool:available,checked:false,flipped:false,finished:false,missed:[],correct:0,matchDone:[],matchWrong:[],selected:null,matchPage:0};
+    const pool=C.uniquePrompts(C.queue(available,Date.now(),available.length),settings.direction);
+    if(mode==='match' && pool.length<2) {toast('Для поиска пар нужны хотя бы две разные подсказки. Начнём с карточек.'); mode='cards';}
+    if(mode==='choice' && new Set(pool.map(w=>(settings.direction==='de-ru'?w.ru:w.de).trim())).size<2) {toast('Для выбора нужны хотя бы два разных точных ответа. Начнём с карточек.'); mode='cards';}
+    const selected=shuffle(pool.slice(0,mode==='match'?Math.min(12,settings.count):settings.count));
+    session={mode,ids:selected.map(w=>w.id),index:0,answers:[],start:Date.now(),direction:settings.direction,pool,checked:false,flipped:false,finished:false,missed:[],correct:0,matchDone:[],matchRightDone:[],matchWrong:[],selected:null,matchPage:0};
     page='practice';history.replaceState(null,'','#practice');render();window.scrollTo({top:0,behavior:'instant'});
   }
   const currentWord = () => data.words.find(w=>w.id===session?.ids[session.index]);
@@ -156,12 +157,12 @@
     let controls='';
     if(session.mode==='cards') controls=session.flipped?`<div class="flash-actions"><button class="button secondary" data-rate="wrong">${ico('close')} Пока не помню</button><button class="button primary" data-rate="correct">${ico('check')} Помню</button></div>`:`<div class="flash-actions"><button class="button primary" data-action="flip">Показать перевод ${ico('arrow')}</button></div>`;
     if(session.mode==='choice') {
-      if(!session.options) {const correct=answerOf(w), seen=new Set([C.normalize(correct)]); const distractors=shuffle(session.pool.filter(x=>x.id!==w.id)).map(answerOf).filter(a=>{const key=C.normalize(a);if(seen.has(key))return false;seen.add(key);return true;}).slice(0,3); session.options=shuffle([correct,...distractors]);}
-      controls=`<div class="choice-grid">${session.options.map((a,i)=>`<button class="choice-button ${session.checked?(a===answerOf(w)?'correct':i===session.chosen?'incorrect':''):''}" data-choice="${i}" ${session.checked?'disabled':''}><span class="choice-number">${i+1}</span>${esc(a)}</button>`).join('')}</div>`;
+      if(!session.options) {const seen=new Set([answerOf(w).trim()]); const distractors=shuffle(session.pool).map(answerOf).filter(value=>{const key=value.trim(); if(seen.has(key))return false; seen.add(key);return true;}).slice(0,3); session.options=shuffle([answerOf(w),...distractors]);}
+      controls=`<div class="choice-grid">${session.options.map((a,i)=>`<button class="choice-button ${session.checked?(C.checkAnswer(a,answerOf(w))?'correct':i===session.chosen?'incorrect':''):''}" data-choice="${i}" ${session.checked?'disabled':''}><span class="choice-number">${i+1}</span>${esc(a)}</button>`).join('')}</div>`;
     }
     if(session.mode==='typing') controls=`<form class="typing-form" id="typing-form"><input id="typing-answer" name="answer" aria-label="Ваш перевод" placeholder="${session.direction==='de-ru'?'Напиши перевод…':'Schreib das Wort…'}" value="${esc(session.typed||'')}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" maxlength="300" required ${session.checked?'disabled':''}><button class="button primary" ${session.checked?'disabled':''}>Проверить ${ico('check')}</button></form>${session.direction==='ru-de'&&!session.checked?'<div class="umlaut-keys" aria-label="Немецкие буквы">'+['ä','ö','ü','ß'].map(c=>`<button data-char="${c}" type="button">${c}</button>`).join('')+'</div>':''}`;
     const feedback=session.checked?`<div class="feedback ${session.lastCorrect?'':'wrong'}" role="status"><div><strong>${session.lastCorrect?'Richtig! Всё верно.':'Ничего, запомним вместе.'}</strong><p>${session.lastCorrect?'Ещё один маленький шаг вперёд.':`Правильный ответ: ${esc(answerOf(w))}`}</p></div><button class="button primary" data-action="next">${session.index+1===session.ids.length?'Результат':'Дальше'} ${ico('arrow')}</button></div>`:'';
-    return sessionHeader()+`<div class="question-wrap"><div class="question-card ${session.flipped?'flipped':''}"><span class="eyebrow">${session.direction==='de-ru'?'СЛОВО НА НЕМЕЦКОМ':'ВСПОМНИ ПО-НЕМЕЦКИ'}</span>${session.direction==='de-ru'?`<button class="word-sound" data-speak="${esc(w.id)}" aria-label="Послушать слово">${ico('sound')}</button>`:''}<h2>${esc(promptOf(w))}</h2>${session.flipped?`<div class="flip-answer">${esc(answerOf(w))}</div>`:'<p class="question-hint">Какой у этого слова перевод?</p>'}</div>${controls}${feedback}<p class="session-tip">${session.mode==='cards'?'Сначала вспомни перевод самостоятельно. Потом проверь себя.':session.mode==='typing'?(session.direction==='ru-de'?'Артикль тоже важен. Можно писать ae, oe, ue вместо ä, ö, ü.':'Если у слова несколько переводов, достаточно одного.'): 'Можно отвечать клавишами 1–4. Enter — следующий вопрос.'}</p></div>`;
+    return sessionHeader()+`<div class="question-wrap"><div class="question-card ${session.flipped?'flipped':''}"><span class="eyebrow">${session.direction==='de-ru'?'СЛОВО НА НЕМЕЦКОМ':'ВСПОМНИ ПО-НЕМЕЦКИ'}</span>${session.direction==='de-ru'?`<button class="word-sound" data-speak="${esc(w.id)}" aria-label="Послушать слово">${ico('sound')}</button>`:''}<h2>${esc(promptOf(w))}</h2>${session.flipped?`<div class="flip-answer">${esc(answerOf(w))}</div>`:'<p class="question-hint">Какой перевод ты сохранил для этого слова?</p>'}</div>${controls}${feedback}<p class="session-tip">${session.mode==='cards'?'Вспомни весь сохранённый перевод. Потом проверь себя.':session.mode==='typing'?'Введи весь текст точно как в словаре: важны регистр, буквы, знаки и пробелы внутри. Пробелы по краям не учитываются.': 'Выбери точный перевод из своей пары. Клавиши 1–4 — ответ, Enter — дальше.'}</p></div>`;
   }
   function record(w,correct) {
     const pos=data.words.findIndex(x=>x.id===w.id);if(pos<0)return;
@@ -175,19 +176,20 @@
     if(!session.matchBatch) {
       session.matchBatch=session.ids.slice(session.matchPage*4,(session.matchPage+1)*4);
       session.matchRight=shuffle(session.matchBatch);
+      session.matchRightDone=[];
     }
-    const tile=(id,side)=>{const w=data.words.find(x=>x.id===id);const matched=session.matchDone.includes(id);return `<button class="match-tile ${matched?'matched':''} ${session.selected?.id===id&&session.selected?.side===side?'selected':''}" data-match="${esc(id)}" data-side="${side}" ${matched?'disabled':''}>${esc(side==='left'?promptOf(w):answerOf(w))}</button>`;};
-    return sessionHeader()+`<p class="match-instructions">Нажми на слово слева, затем на его перевод справа. Найди все пары.</p><div class="match-grid"><div class="match-column">${session.matchBatch.map(id=>tile(id,'left')).join('')}</div><div class="match-column">${session.matchRight.map(id=>tile(id,'right')).join('')}</div></div><p class="session-tip">${session.matchDone.length} пар найдено · ${session.matchErrors||0} ошибок</p>`;
+    const tile=(id,side)=>{const w=data.words.find(x=>x.id===id);const matched=(side==='left'?session.matchDone:session.matchRightDone).includes(id);return `<button class="match-tile ${matched?'matched':''} ${session.selected?.id===id&&session.selected?.side===side?'selected':''}" data-match="${esc(id)}" data-side="${side}" ${matched?'disabled':''}>${esc(side==='left'?promptOf(w):answerOf(w))}</button>`;};
+    return sessionHeader()+`<p class="match-instructions">Соедини слово с точным переводом, который ты сохранил для него.</p><div class="match-grid"><div class="match-column">${session.matchBatch.map(id=>tile(id,'left')).join('')}</div><div class="match-column">${session.matchRight.map(id=>tile(id,'right')).join('')}</div></div><p class="session-tip" aria-live="polite">${session.matchDone.length} пар найдено · ${session.matchErrors||0} ошибок</p>`;
   }
   function matchSelect(id,side) {
-    if(!session||session.matchBusy||session.matchDone.includes(id))return;
+    if(!session||session.matchBusy||(side==='left'?session.matchDone:session.matchRightDone).includes(id))return;
     if(!session.selected||session.selected.side===side) {session.selected={id,side};render();return;}
     const left=side==='left'?id:session.selected.id, right=side==='right'?id:session.selected.id;
     const leftWord=data.words.find(w=>w.id===left), rightWord=data.words.find(w=>w.id===right);
-    const correct=left===right || C.normalize(answerOf(leftWord))===C.normalize(answerOf(rightWord));
+    const correct=C.checkAnswer(answerOf(rightWord),answerOf(leftWord));
     if(correct) {
-      // Equivalent duplicate translations are accepted; consume the canonical pair to keep the board solvable.
       session.matchDone.push(left);
+      session.matchRightDone.push(right);
       if(!session.matchWrong.includes(left))record(leftWord,true);
       session.selected=null;
       if(session.matchBatch.every(x=>session.matchDone.includes(x))) {
@@ -224,8 +226,8 @@
   }
   function switchTab(tab) {$('#word-form').hidden=tab!=='single';$('#bulk-form').hidden=tab!=='bulk';$$('[data-tab]').forEach(e=>e.classList.toggle('active',e.dataset.tab===tab));}
   function addMany(words) {
-    const known=new Set(data.words.map(w=>C.normalize(w.de)+'|'+C.normalize(w.ru)));let added=0,duplicates=0;
-    for(const w of words){const key=C.normalize(w.de)+'|'+C.normalize(w.ru);if(known.has(key)){duplicates++;continue;}if(data.words.length>=10000)break;known.add(key);data.words.push(w);added++;}
+    const known=new Set(data.words.map(w=>C.pairKey(w.de,w.ru)));let added=0,duplicates=0;
+    for(const w of words){const key=C.pairKey(w.de,w.ru);if(known.has(key)){duplicates++;continue;}if(data.words.length>=10000)break;known.add(key);data.words.push(w);added++;}
     persist();return {added,duplicates};
   }
   function exportData() {
@@ -260,7 +262,7 @@
     }
     const mode=e.target.closest('[data-mode]');if(mode){startSession(mode.dataset.mode);return;}
     const rate=e.target.closest('[data-rate]');if(rate&&session){answer(rate.dataset.rate==='correct');nextQuestion();return;}
-    const choice=e.target.closest('[data-choice]');if(choice&&session){session.chosen=Number(choice.dataset.choice);answer(session.options[session.chosen]===answerOf(currentWord()));return;}
+    const choice=e.target.closest('[data-choice]');if(choice&&session){session.chosen=Number(choice.dataset.choice);answer(C.checkAnswer(session.options[session.chosen],answerOf(currentWord())));return;}
     const match=e.target.closest('[data-match]');if(match){matchSelect(match.dataset.match,match.dataset.side);return;}
     const edit=e.target.closest('[data-edit]');if(edit){openWords(edit.dataset.edit);return;}
     const del=e.target.closest('[data-delete]');if(del){const w=data.words.find(w=>w.id===del.dataset.delete);if(w)confirmAction('Удалить слово?',`«${w.de}» и его прогресс будут удалены из словаря. История занятий останется.`,()=>{data.words=data.words.filter(x=>x.id!==w.id);persist();render();toast('Слово удалено.');});return;}
@@ -290,7 +292,7 @@
   });
   $('#import-file').addEventListener('change',async e=>{
     const file=e.target.files[0];if(!file)return;
-    if(file.size>15*1024*1024){$('#import-feedback').textContent='Файл слишком большой. Максимум — 15 МБ.';e.target.value='';return;}
+    if(!file.name.toLowerCase().endsWith('.json')&&file.size>15*1024*1024){$('#import-feedback').textContent='Файл слишком большой. Максимум — 15 МБ для текстового списка.';e.target.value='';return;}
     try {
       const text=await file.text();
       if(file.name.toLowerCase().endsWith('.json')) {
