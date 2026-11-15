@@ -1,12 +1,12 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const C=require('../core.js');
-test('accept alternatives and German keyboard substitutions',()=>{
-  assert.equal(C.checkAnswer('изучать','учить / изучать'),true);
-  assert.equal(C.checkAnswer('  GLUECKLICH  ','glücklich'),true);
-  assert.equal(C.checkAnswer('Strasse','Straße'),true);
-  assert.equal(C.checkAnswer('домик','дом'),false);
-  assert.equal(C.checkAnswer('Katze','die Katze'),false);
+test('answers match only the complete saved text, ignoring outer whitespace',()=>{
+  assert.equal(C.checkAnswer('  glücklich  ','glücklich'),true);
+  assert.equal(C.checkAnswer('учить / изучать','учить / изучать'),true);
+  for(const [answer,expected] of [['изучать','учить / изучать'],['учить','учить; изучать'],['ДОМ','дом'],['все','всё'],['gluecklich','glücklich'],['Strasse','Straße'],['дом.','дом'],['guten  Tag','guten Tag'],['Katze','die Katze']]) {
+    assert.equal(C.checkAnswer(answer,expected),false,`${answer} must not equal ${expected}`);
+  }
 });
 test('parse common text, TSV and quoted CSV imports',()=>{
   const p=C.parseBulk('das Haus — дом\nlernen = учить / изучать\ndie Zeit;время\n"der Tag","день, сутки"\nsprechen\tговорить','A1');
@@ -14,6 +14,38 @@ test('parse common text, TSV and quoted CSV imports',()=>{
 });
 test('bad import rows are identified before committing any data',()=>{
   const p=C.parseBulk('Haus — дом\nошибка\nZeit — ','A1');assert.deepEqual(p.errors,[2,3]);
+});
+test('CSV delimiters inside quoted fields do not corrupt imported words',()=>{
+  for(const translation of ['день — сутки','день; сутки','день = сутки','день, сутки']) {
+    const p=C.parseBulk(`"der Tag","${translation}"`,'A1');
+    assert.deepEqual(p.errors,[]);assert.equal(p.words[0].de,'der Tag');assert.equal(p.words[0].ru,translation);
+  }
+  const escaped=C.parseBulk('"der Tag";"день, \"\"сутки\"\""','A1');
+  assert.equal(escaped.words[0].ru,'день, "сутки"');
+  const hyphenated=C.parseBulk('die E-Mail - электронная почта','A1');
+  assert.equal(hyphenated.words[0].de,'die E-Mail');assert.equal(hyphenated.words[0].ru,'электронная почта');
+  const phrase=C.parseBulk('Hallo, wie geht es dir? — Привет, как дела?','A1');
+  assert.equal(phrase.words[0].de,'Hallo, wie geht es dir?');assert.equal(phrase.words[0].ru,'Привет, как дела?');
+  assert.deepEqual(C.parseBulk('"der Tag","незакрытая строка','A1').errors,[1]);
+});
+test('a CSV or TSV header fixes the column separator for every following row',()=>{
+  for(const delimiter of [',',';','\t']) {
+    const p=C.parseBulk(`\nde${delimiter}ru\nder Tag${delimiter}день — сутки\nX${delimiter}размер 2=3`,'A1');
+    assert.deepEqual(p.errors,[]);assert.equal(p.words.length,2);
+    assert.equal(p.words[0].de,'der Tag');assert.equal(p.words[0].ru,'день — сутки');
+    assert.equal(p.words[1].ru,'размер 2=3');
+  }
+  const quoted=C.parseBulk('"de","ru"\n"der Tag","день — сутки"','A1');
+  assert.equal(quoted.words[0].ru,'день — сутки');
+});
+test('bulk imports validate the complete translation before persistence',()=>{
+  const rejected=C.parseBulk('Haus;дом;'+'x'.repeat(300),'A1');
+  assert.deepEqual(rejected.errors,[1]);assert.equal(rejected.words.length,0);
+  const accepted=C.parseBulk('Haus;дом;жилище','A1');
+  assert.equal(accepted.words[0].ru,'дом;жилище');
+  assert.equal(C.validBackup({schema:1,words:accepted.words,history:[]}),true);
+  assert.equal(C.parseBulk('X = размер 2=3','A1').words[0].ru,'размер 2=3');
+  assert.equal(C.parseBulk('Haus — дом — жилище','A1').words[0].ru,'дом — жилище');
 });
 test('first success schedules a short review without claiming mastery',()=>{
   const w=C.applyAnswer(C.makeWord('Haus','дом'),true,1000000);assert.equal(w.level,1);assert.equal(w.due,1600000);assert.equal(C.status(w),'learning');
@@ -42,4 +74,40 @@ test('backup validates and rejects invalid levels, duplicate IDs, and malformed 
   assert.equal(C.validBackup({...d,words:[{...d.words[0],level:99}]}),false);
   assert.equal(C.validBackup({...d,words:[d.words[0],d.words[0]]}),false);
   assert.equal(C.validBackup({...d,history:[{id:'x',correct:'true',date:'today',at:1}]}),false);
+});
+test('backup rejects malformed mistake counters before they can alter statistics',()=>{
+  const word=C.makeWord('Haus','дом');
+  for(const lapses of ['0',-1,1.5,undefined]) assert.equal(C.validBackup({schema:1,words:[{...word,lapses}],history:[]}),false);
+  let trained=C.applyAnswer(word,false,1000000);trained=C.applyAnswer(trained,false,2000000);
+  assert.equal(trained.lapses,2);assert.equal(C.validBackup({schema:1,words:[trained],history:[]}),true);
+});
+test('adding an answer never invalidates a previously accepted long history',()=>{
+  const word=C.makeWord('Haus','дом'),history=Array.from({length:100000},()=>({id:word.id,date:'2026-11-15',correct:true,at:1000000}));
+  const data={schema:1,words:[word],history};
+  assert.equal(C.validBackup(data),true);
+  history.push({id:word.id,date:'2026-11-15',correct:false,at:2000000});
+  assert.equal(C.validBackup(data),true);
+});
+test('strict pair keys preserve distinct letters, case, spacing, and literal separators',()=>{
+  assert.notEqual(C.pairKey('glücklich','счастливый'),C.pairKey('gluecklich','счастливый'));
+  assert.notEqual(C.pairKey('alle','все'),C.pairKey('alle','всё'));
+  assert.notEqual(C.pairKey('a|b','c'),C.pairKey('a','b|c'));
+  assert.notEqual(C.pairKey('Haus','дом'),C.pairKey('haus','дом'));
+  assert.notEqual(C.pairKey('guten  Tag','привет'),C.pairKey('guten Tag','привет'));
+  assert.equal(C.pairKey(' Haus ',' дом '),C.pairKey('Haus','дом'));
+});
+test('practice omits ambiguous duplicate prompts without merging their saved answers',()=>{
+  const bank=C.makeWord('die Bank','банк'),bench=C.makeWord('die Bank','скамья'),house=C.makeWord('das Haus','дом / жилище'),building=C.makeWord('das Gebäude','жилище'),pool=[bank,bench,house,building];
+  assert.deepEqual(C.uniquePrompts(pool).map(w=>w.id),[bank.id,house.id,building.id]);
+  assert.equal(C.checkAnswer(bench.ru,bank.ru),false);
+  assert.equal(C.checkAnswer(building.ru,house.ru),false);
+  assert.equal(pool.length,4);
+  const sameRussian=C.makeWord('das Heim','жилище');
+  assert.deepEqual(C.uniquePrompts([building,sameRussian],'ru-de').map(w=>w.id),[building.id]);
+});
+test('due priority is applied before removing duplicate practice prompts',()=>{
+  const now=Date.now(),early={...C.makeWord('die Bank','банк'),attempts:1,level:2,due:now+C.DAY,lastSeen:now},due={...C.makeWord('die Bank','скамья'),attempts:1,level:1,due:now-1,lastSeen:now-C.DAY},fresh=C.makeWord('das Haus','дом');
+  const pool=C.uniquePrompts(C.queue([early,fresh,due],now,3));
+  assert.deepEqual(pool.map(w=>w.id),[due.id,fresh.id]);
+  assert.equal(pool[0].ru,'скамья');
 });
